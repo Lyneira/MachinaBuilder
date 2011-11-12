@@ -1,5 +1,5 @@
-MachinaDozer
-============
+MachinaBuilder
+==============
 
 A plugin for MachinaCraft. It implements a Machina that moves forward and drops
 blocks from its chest under the iron blocks at its front. 
