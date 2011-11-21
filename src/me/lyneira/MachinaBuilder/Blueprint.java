@@ -7,6 +7,7 @@ import java.util.ListIterator;
 import org.bukkit.Material;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
 import me.lyneira.MachinaCraft.BlockData;
 import me.lyneira.MachinaCraft.BlockLocation;
@@ -32,6 +33,7 @@ public class Blueprint extends MovableBlueprint {
 	private final static Material furnaceMaterial = Material.FURNACE;
 	private final static Material burningFurnaceMaterial = Material.BURNING_FURNACE;
 	private final static Material supplyContainerMaterial = Material.CHEST;
+	final static Material rotateMaterial = Material.STICK;
 
 	final static int leverIndex;
 	final static int centralBaseIndex;
@@ -44,29 +46,28 @@ public class Blueprint extends MovableBlueprint {
 
 	static {
 		blueprints = new ArrayList<BlueprintFactory>(3);
-		
+
 		mainModuleIndex = blueprints.size();
 		BlueprintFactory mainModule = new BlueprintFactory();
 		blueprints.add(mainModule);
-		
+
 		leftModuleIndex = blueprints.size();
 		BlueprintFactory leftModule = new BlueprintFactory();
 		blueprints.add(leftModule);
-		
+
 		rightModuleIndex = blueprints.size();
 		BlueprintFactory rightModule = new BlueprintFactory();
 		blueprints.add(rightModule);
 
-		
 		mainModule.addKey(new BlockVector(0, 1, 0), Material.LEVER)
 				.addKey(new BlockVector(0, 0, 0), baseMaterial)
 				.addKey(new BlockVector(-1, 0, 0), burningFurnaceMaterial)
 				.addKey(new BlockVector(1, 1, 0), supplyContainerMaterial)
 				.addKey(new BlockVector(1, 0, 0), headMaterial);
-		
+
 		leftModule.addKey(new BlockVector(1, 0, -1), headMaterial).add(
 				new BlockVector(0, 0, -1), baseMaterial);
-		
+
 		rightModule.addKey(new BlockVector(1, 0, 1), headMaterial).add(
 				new BlockVector(0, 0, 1), baseMaterial);
 
@@ -92,11 +93,11 @@ public class Blueprint extends MovableBlueprint {
 	}
 
 	/**
-	 * Detects whether a builder is present at the given BlockLocation. Key blocks
-	 * defined above must be detected manually.
+	 * Detects whether a builder is present at the given BlockLocation. Key
+	 * blocks defined above must be detected manually.
 	 */
 	public Machina detect(Player player, BlockLocation anchor,
-			BlockFace leverFace) {
+			BlockFace leverFace, ItemStack itemInHand) {
 		if (leverFace != BlockFace.UP)
 			return null;
 
@@ -110,26 +111,38 @@ public class Blueprint extends MovableBlueprint {
 		if (anchor.checkType(baseMaterial)) {
 			// Search for a furnace around the anchor.
 			for (BlockRotation i : BlockRotation.values()) {
-				if (anchor.getRelative(i.getFacing())
-						.checkType(furnaceMaterial)) {
+				if (anchor.getRelative(i.getYawFace()).checkType(
+						furnaceMaterial)) {
 					BlockRotation yaw = i.getOpposite();
 					BlockLocation primaryHead = anchor.getRelative(yaw
-							.getFacing());
+							.getYawFace());
 					if (primaryHead.checkType(headMaterial)
 							&& primaryHead.getRelative(BlockFace.UP).checkType(
 									supplyContainerMaterial)) {
-						List<Integer> detectedModules = new ArrayList<Integer>(3);
+						List<Integer> detectedModules = new ArrayList<Integer>(
+								3);
 						detectedModules.add(mainModuleIndex);
 						// Detect optional modules here.
-						BlockLocation head = primaryHead.getRelative(yaw.getLeft().getFacing());
-						if (head.checkType(headMaterial) && detectOther(anchor, yaw, leftModuleIndex)) {
+						BlockLocation head = primaryHead.getRelative(yaw
+								.getLeft().getYawFace());
+						if (head.checkType(headMaterial)
+								&& detectOther(anchor, yaw, leftModuleIndex)) {
 							detectedModules.add(leftModuleIndex);
 						}
-						head = primaryHead.getRelative(yaw.getRight().getFacing());
-						if (head.checkType(headMaterial) && detectOther(anchor, yaw, rightModuleIndex)) {
+						head = primaryHead.getRelative(yaw.getRight()
+								.getYawFace());
+						if (head.checkType(headMaterial)
+								&& detectOther(anchor, yaw, rightModuleIndex)) {
 							detectedModules.add(rightModuleIndex);
 						}
-						return new Builder(instance, player, anchor, yaw, detectedModules);
+						Builder builder = new Builder(instance, detectedModules, yaw, player, anchor);
+						if (itemInHand != null
+								&& itemInHand.getType() == rotateMaterial) {
+							builder.doRotate(anchor, BlockRotation.yawFromLocation(player.getLocation()));
+							builder.onDeActivate(anchor);
+							builder = null;
+						}
+						return builder;
 					}
 				}
 			}

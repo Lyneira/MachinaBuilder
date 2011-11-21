@@ -10,7 +10,6 @@ import me.lyneira.MachinaCraft.Fuel;
 import me.lyneira.MachinaCraft.HeartBeatEvent;
 import me.lyneira.MachinaCraft.Movable;
 
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
@@ -42,9 +41,9 @@ public class Builder extends Movable {
 	private int currentEnergy = 0;
 
 	/**
-	 * True if the Builder should move during the next action.
+	 * The next target location for the builder.
 	 */
-	private boolean nextMove = false;
+	private BlockLocation queuedTarget = null;
 
 	/**
 	 * Creates a new drill.
@@ -58,33 +57,37 @@ public class Builder extends Movable {
 	 * @param moduleIndices
 	 *            The active modules for the drill
 	 */
-	Builder(final Blueprint blueprint, Player player, BlockLocation anchor,
-			final BlockRotation yaw, final List<Integer> moduleIndices) {
-		super(blueprint, player, yaw, moduleIndices);
+	Builder(final Blueprint blueprint, final List<Integer> moduleIndices,
+			final BlockRotation yaw, Player player, BlockLocation anchor) {
+		super(blueprint, moduleIndices, yaw, player);
 
 		this.player = player;
 		// Set furnace to burning state.
-		Block furnace = anchor.getRelative(
-				blueprint.getByIndex(Blueprint.furnaceIndex, yaw,
-						Blueprint.mainModuleIndex)).getBlock();
-		Inventory inventory = ((Furnace) furnace.getState()).getInventory();
-		Fuel.setFurnace(furnace, yaw.getOpposite().getFacing(), true, inventory);
+		setFurnace(anchor, true);
 	}
 
 	/**
 	 * Initiates the current move or build action.
 	 */
 	public HeartBeatEvent heartBeat(final BlockLocation anchor) {
-		if (nextMove) {
+		// Builder will not function for offline players.
+		if (!player.isOnline())
+			return null;
+
+		BlockLocation target = nextBuild(anchor);
+		if (target == null && queuedTarget == null) {
 			BlockLocation newAnchor = doMove(anchor);
 			if (newAnchor == null) {
 				return null;
 			}
 			return new HeartBeatEvent(queueAction(newAnchor), newAnchor);
-		} else if (doBuild(anchor)) {
-			return new HeartBeatEvent(queueAction(anchor));
+		} else if (target != null && target.equals(queuedTarget)
+				&& target.isEmpty()) {
+			if (!doBuild(anchor)) {
+				return null;
+			}
 		}
-		return null;
+		return new HeartBeatEvent(queueAction(anchor));
 	}
 
 	/**
@@ -95,11 +98,10 @@ public class Builder extends Movable {
 	 * @return Delay in server ticks for the next action
 	 */
 	private int queueAction(final BlockLocation anchor) {
-		if (nextBuild(anchor) == null) {
-			nextMove = true;
+		queuedTarget = nextBuild(anchor);
+		if (queuedTarget == null) {
 			return moveDelay;
 		} else {
-			nextMove = false;
 			return buildDelay;
 		}
 	}
@@ -114,43 +116,37 @@ public class Builder extends Movable {
 	 *         on.
 	 */
 	private boolean doBuild(final BlockLocation anchor) {
-		BlockLocation nextBuild = nextBuild(anchor);
-		if (nextBuild == null) {
-			return true;
-		} else {
-			Block chestBlock = anchor.getRelative(
-					blueprint.getByIndex(Blueprint.containerIndex, yaw,
-							Blueprint.mainModuleIndex)).getBlock();
-			Inventory inventory = ((Chest) chestBlock.getState())
-					.getInventory();
-			ItemStack[] contents = inventory.getContents();
-			for (int i = 0; i < contents.length; i++) {
-				ItemStack stack = contents[i];
-				int typeId;
-				if (contents[i] != null
-						&& BlockData.isSolid(typeId = stack.getTypeId())) {
-					// Simulate a build action
-					if (!canPlace(nextBuild, typeId,
-							nextBuild.getRelative(BlockFace.DOWN))) {
-						return false;
-					}
-					// Use energy last
-					if (!useEnergy(anchor, buildDelay))
-						return false;
-					int amount = stack.getAmount();
-					if (amount == 1) {
-						inventory.clear(i);
-					} else {
-						stack.setAmount(amount - 1);
-						inventory.setItem(i, stack);
-					}
-					byte data = stack.getData().getData();
-					nextBuild.getBlock().setTypeIdAndData(typeId, data, false);
-					return true;
+		Block chestBlock = anchor.getRelative(
+				blueprint.getByIndex(Blueprint.containerIndex, yaw,
+						Blueprint.mainModuleIndex)).getBlock();
+		Inventory inventory = ((Chest) chestBlock.getState()).getInventory();
+		ItemStack[] contents = inventory.getContents();
+		for (int i = 0; i < contents.length; i++) {
+			ItemStack stack = contents[i];
+			int typeId;
+			if (contents[i] != null
+					&& BlockData.isSolid(typeId = stack.getTypeId())) {
+				// Simulate a build action
+				if (!canPlace(queuedTarget, typeId,
+						queuedTarget.getRelative(BlockFace.DOWN))) {
+					return false;
 				}
+				// Use energy last
+				if (!useEnergy(anchor, buildDelay))
+					return false;
+				int amount = stack.getAmount();
+				if (amount == 1) {
+					inventory.clear(i);
+				} else {
+					stack.setAmount(amount - 1);
+					inventory.setItem(i, stack);
+				}
+				byte data = stack.getData().getData();
+				queuedTarget.getBlock().setTypeIdAndData(typeId, data, false);
+				return true;
 			}
-			return false;
 		}
+		return false;
 	}
 
 	/**
@@ -218,7 +214,7 @@ public class Builder extends Movable {
 	 */
 	private BlockLocation doMove(final BlockLocation anchor) {
 		// Check for ground at the new base
-		BlockFace face = yaw.getFacing();
+		BlockFace face = yaw.getYawFace();
 		BlockLocation newAnchor = anchor.getRelative(face);
 		BlockLocation ground = newAnchor.getRelative(blueprint.getByIndex(
 				Blueprint.centralBaseIndex, yaw, Blueprint.mainModuleIndex)
@@ -228,10 +224,8 @@ public class Builder extends Movable {
 		}
 
 		// Collision detection
-		for (int i : moduleIndices) {
-			if (blueprint.detectCollision(anchor, face, yaw, i)) {
-				return null;
-			}
+		if (detectCollision(anchor, face)) {
+			return null;
 		}
 
 		// Simulate a block place event to give protection plugins a chance to
@@ -250,6 +244,28 @@ public class Builder extends Movable {
 		moveByFace(anchor, face);
 
 		return newAnchor;
+	}
+
+	/**
+	 * Rotates the builder to the new direction, if this would not cause a
+	 * collision.
+	 * 
+	 * @param anchor
+	 *            The anchor of the builder
+	 * @param newYaw
+	 *            The new direction
+	 */
+	void doRotate(final BlockLocation anchor, final BlockRotation newYaw) {
+		BlockRotation rotateBy = newYaw.subtract(yaw);
+		if (rotateBy == BlockRotation.ROTATE_0) {
+			return;
+		}
+		if (detectCollisionRotate(anchor, rotateBy)) {
+			return;
+		}
+		rotate(anchor, rotateBy);
+		// Set furnace to correct direction.
+		setFurnace(anchor, true);
 	}
 
 	/**
@@ -282,15 +298,20 @@ public class Builder extends Movable {
 	 * Simply checks the appropriate deactivate permission to determine whether
 	 * the player may deactivate the Builder.
 	 */
-	public boolean playerDeActivate(final BlockLocation anchor, Player player) {
-		if (this.player == player) {
-			if (player.hasPermission("machinabuilder.deactivate-own"))
+	public boolean onLever(final BlockLocation anchor, Player player,
+			ItemStack itemInHand) {
+		if ((this.player == player && player
+				.hasPermission("machinabuilder.deactivate-own"))
+				|| player.hasPermission("machinabuilder.deactivate-all")) {
+			if (itemInHand != null
+					&& itemInHand.getType() == Blueprint.rotateMaterial) {
+				doRotate(anchor,
+						BlockRotation.yawFromLocation(player.getLocation()));
 				return true;
-		} else {
-			if (player.hasPermission("machinabuilder.deactivate-all"))
-				return true;
+			}
+			return false;
 		}
-		return false;
+		return true;
 	}
 
 	/**
@@ -300,14 +321,23 @@ public class Builder extends Movable {
 	 *            The anchor of the Drill being deactivated
 	 */
 	public void onDeActivate(final BlockLocation anchor) {
-		// Set furnace to off state.
+		setFurnace(anchor, false);
+	}
+
+	/**
+	 * Sets the builder's furnace to the given state and set correct direction.
+	 * 
+	 * @param anchor
+	 *            The builder's anchor
+	 * @param burning
+	 *            Whether the furnace should be burning.
+	 */
+	void setFurnace(final BlockLocation anchor, final boolean burning) {
 		Block furnace = anchor.getRelative(
 				blueprint.getByIndex(Blueprint.furnaceIndex, yaw,
 						Blueprint.mainModuleIndex)).getBlock();
-		if (furnace.getType() == Material.BURNING_FURNACE) {
-			Inventory inventory = ((Furnace) furnace.getState()).getInventory();
-			Fuel.setFurnace(furnace, yaw.getOpposite().getFacing(), false,
-					inventory);
-		}
+		Inventory inventory = ((Furnace) furnace.getState()).getInventory();
+		Fuel.setFurnace(furnace, yaw.getOpposite().getYawFace(), burning,
+				inventory);
 	}
 }
