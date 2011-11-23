@@ -14,22 +14,21 @@ import org.bukkit.plugin.java.JavaPlugin;
  * @author Lyneira
  */
 public class MachinaBuilder extends JavaPlugin {
-	final static Logger log = Logger.getLogger("Minecraft");
-	static PluginManager pluginManager;
+    final static Logger log = Logger.getLogger("Minecraft");
+    static PluginManager pluginManager;
 
-	public final void onEnable() {
-		pluginManager =  this.getServer().getPluginManager();
-		PluginDescriptionFile pdf = getDescription();
-		log.info(pdf.getName() + " version " + pdf.getVersion()
-				+ " is now enabled.");
+    public final void onEnable() {
+        pluginManager = this.getServer().getPluginManager();
+        PluginDescriptionFile pdf = getDescription();
+        log.info(pdf.getName() + " version " + pdf.getVersion() + " is now enabled.");
 
-		MachinaCraft.plugin.registerBlueprint(Blueprint.instance);
-	}
+        MachinaCraft.plugin.registerBlueprint(Blueprint.instance);
+    }
 
-	public final void onDisable() {
-		PluginDescriptionFile pdf = getDescription();
-		log.info(pdf.getName() + " is now disabled.");
+    public final void onDisable() {
+        PluginDescriptionFile pdf = getDescription();
+        log.info(pdf.getName() + " is now disabled.");
 
-		MachinaCraft.plugin.unRegisterBlueprint(Blueprint.instance);
-	}
+        MachinaCraft.plugin.unRegisterBlueprint(Blueprint.instance);
+    }
 }
