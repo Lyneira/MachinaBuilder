@@ -218,7 +218,7 @@ public class Builder extends Movable {
 
         // Simulate a block place event to give protection plugins a chance to
         // stop the move
-        if (!canPlace(newAnchor, Blueprint.primaryHeadIndex, Blueprint.headMaterial, Blueprint.mainModuleIndex)) {
+        if (!canMove(newAnchor, Blueprint.primaryHeadIndex, Blueprint.headMaterial, Blueprint.mainModuleIndex)) {
             return null;
         }
 
