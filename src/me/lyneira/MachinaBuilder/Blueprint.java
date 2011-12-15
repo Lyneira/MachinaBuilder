@@ -94,9 +94,6 @@ public class Blueprint extends MovableBlueprint {
         if (leverFace != BlockFace.UP)
             return null;
 
-        if (!player.hasPermission("machinabuilder.activate"))
-            return null;
-
         // Check if the Builder is on solid ground.
         if (!BlockData.isSolid(anchor.getRelative(BlockFace.DOWN).getTypeId()))
             return null;
@@ -108,6 +105,11 @@ public class Blueprint extends MovableBlueprint {
                     BlockRotation yaw = i.getOpposite();
                     BlockLocation primaryHead = anchor.getRelative(yaw.getYawFace());
                     if (primaryHead.checkType(headMaterial) && primaryHead.getRelative(BlockFace.UP).checkType(supplyContainerMaterial)) {
+                        if (!player.hasPermission("machinabuilder.activate")) {
+                            player.sendMessage("You do not have permission to activate a builder.");
+                            return null;
+                        }
+
                         List<Integer> detectedModules = new ArrayList<Integer>(3);
                         detectedModules.add(mainModuleIndex);
                         // Detect optional modules here.
@@ -119,6 +121,7 @@ public class Blueprint extends MovableBlueprint {
                         if (head.checkType(headMaterial) && detectOther(anchor, yaw, rightModuleIndex)) {
                             detectedModules.add(rightModuleIndex);
                         }
+
                         Builder builder = new Builder(instance, detectedModules, yaw, player, anchor);
                         if (itemInHand != null && itemInHand.getType() == rotateMaterial) {
                             builder.doRotate(anchor, BlockRotation.yawFromLocation(player.getLocation()));

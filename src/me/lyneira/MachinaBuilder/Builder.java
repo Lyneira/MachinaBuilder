@@ -312,7 +312,6 @@ public class Builder extends Movable {
      */
     void setFurnace(final BlockLocation anchor, final boolean burning) {
         Block furnace = anchor.getRelative(blueprint.getByIndex(Blueprint.furnaceIndex, yaw, Blueprint.mainModuleIndex)).getBlock();
-        Inventory inventory = ((Furnace) furnace.getState()).getInventory();
-        Fuel.setFurnace(furnace, yaw.getOpposite().getYawFace(), burning, inventory);
+        Fuel.setFurnace(furnace, yaw.getOpposite().getYawFace(), burning);
     }
 }
